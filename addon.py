@@ -5,15 +5,28 @@ from xbmcswift2 import Plugin, xbmc, xbmcaddon
 from operator import itemgetter
 import socket, json
 
+plugin = Plugin()
+
+CACHE_TTL = 60 * 24 # minutes
+
 STRINGS = {
     'error': 30001
 }
 
-plugin = Plugin()
+
+################################################################################
+#
+#   Routes
+#
+################################################################################
 
 
 @plugin.route('/')
 def show_groups():
+    plugin.finish(get_group_items())
+
+@plugin.cached(TTL = CACHE_TTL)
+def get_group_items():
     pilight = get_pilight()
     if not pilight.connect(): return plugin_error()
 
@@ -32,12 +45,15 @@ def show_groups():
         });
 
     pilight.disconnect()
-    return plugin.finish(sorted(items, 
-        key = lambda item: item['info']['Year']))
+    return sorted(items, key = lambda item: item['info']['Year'])
 
 
 @plugin.route('/group/<group>')
 def show_devices(group):
+    return plugin.finish(get_devices(group))
+
+@plugin.cached(TTL = CACHE_TTL)
+def get_devices(group):
     pilight = get_pilight()
     if not pilight.connect(): return plugin_error()
 
@@ -59,8 +75,7 @@ def show_devices(group):
         });
 
     pilight.disconnect()
-    return plugin.finish(sorted(items, 
-        key = lambda item: item['info']['Year']))
+    return sorted(items, key = lambda item: item['info']['Year'])
 
 
 @plugin.route('/toggle/<group>/<device>')
@@ -72,6 +87,14 @@ def toggle_device(group, device):
     pilight.disconnect()
 
     plugin.redirect(plugin.url_for('show_devices', group = str(group)))
+
+
+################################################################################
+#
+#   Helper
+#
+################################################################################
+
 
 
 def _(string_id):
@@ -90,7 +113,13 @@ def plugin_error():
     return plugin.finish([{ 'label': _('error'), 'is_playable': False }])
 
 
-# maybe better reading from config.json
+################################################################################
+#
+#   Classes
+#
+################################################################################
+
+
 class Pilight(object):
 
     client = None
@@ -160,7 +189,18 @@ class Pilight(object):
     def _request(self, msg):
         self.client.send(json.dumps(msg))
         response = self.client.makefile(mode = 'r').readline()
-        return json.loads(response)
+
+        try:
+            return json.loads(response)
+        except:
+            return {}
+
+
+################################################################################
+#
+#   Main
+#
+################################################################################
 
 
 if __name__ == '__main__':
