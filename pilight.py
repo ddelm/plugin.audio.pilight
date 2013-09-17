@@ -3,91 +3,96 @@
 
 import json
 
-from twisted.internet.protocol import ReconnectingClientFactory
+from twisted.internet.protocol import ReconnectingClientFactory, Protocol
 from twisted.internet import reactor
 
-from autobahn.websocket import WebSocketClientFactory, \
-                               WebSocketClientProtocol, \
-                               connectWS
 
-
-class PilightClientProtocol(WebSocketClientProtocol):
+class PilightClientProtocol(Protocol):
     
-    config = {}
+    config = None
+
+    def connectionMade(self):
+        reactor.callLater(0, self._sendMessage,
+            { 'message': 'client gui' })
+
+    def _sendMessage(self, message):
+        self.transport.write(json.dumps(message))
 
     def devices(self):
         return config
 
     def toggle(self, location, device):
-        reactor.callLater(0, self.sendMessage, json.dumps({
+        reactor.callLater(0, self._sendMessage, {
             'message': 'send',
             'code': {
                 'location': location,
                 'device': device
             }
-        }))
+        })
 
-        print 'toggle %s:%s' % (location, device)
+    def _updateConfig(self, msg):
+        state = msg['values']['state']
 
-    def _updateConfig(self, data):
-        state = data['values']['state']
-
-        for location in data['devices'].keys():
-            for device in data['devices'][location]:
+        for location in msg['devices'].keys():
+            for device in msg['devices'][location]:
                 self.config[location][device]['state'] = state
-                print "%s => %s" % (device, state)
 
-        reactor.callLater(0, reactor.fireSystemEvent, 'onPilightUpdate')
+        self.factory.onPilightUpdate()
 
-    def onMessage(self, msg, binary):
-        data = json.loads(msg)
-        msg_type = data.keys()[0]
+    def dataReceived(self, data):
+        msg = json.loads(data)
+        msg_type = msg.keys()[0]
 
-        if msg_type == 'config':
-            self.config = data['config']
-            reactor.callLater(0, reactor.fireSystemEvent, 'onPilightConnected')
-            
-            print 'got config'
+        if msg_type == 'message' and msg['message'] == 'accept client':
+            reactor.callLater(0, self._sendMessage,
+                { 'message': 'request config' })
 
-        elif msg_type == 'origin' and data['origin'] == 'config':
-            self._updateConfig(data)
-    
-    def connectionMade(self):
-        WebSocketClientProtocol.connectionMade(self)
-        reactor.callLater(0, self.sendMessage, json.dumps(
-            { 'message': 'request config' }))
+        elif msg_type == 'config':
+            self.config = msg['config']
+            self.factory.onPilightConnected(self)
 
-        print 'request config'
+        elif msg_type == 'origin' and msg['origin'] == 'config':
+            self._updateConfig(msg)
 
 
-class PilightClientFactory(ReconnectingClientFactory, WebSocketClientFactory):
+class PilightClientFactory(ReconnectingClientFactory):
 
-    maxDelay = 1
+    maxDelay = 2
+    protocol = PilightClientProtocol
 
-    def startedConnecting(self, connector):
-        print 'connecting'
+    onPilightConnected = None
+    onPilightDisconnected = None
+    onPilightUpdate = None
 
     def clientConnectionLost(self, connector, reason):
-        print 'connection lost'
-        reactor.callLater(0, reactor.fireSystemEvent, 'onPilightDisconnected')
         ReconnectingClientFactory.clientConnectionLost(self, connector, reason)
+        self.onPilightDisconnected()
 
     def clientConnectionFailed(self, connector, reason):
-        print 'connection failed'
-        reactor.callLater(0, reactor.fireSystemEvent, 'onPilightDisconnected')
         ReconnectingClientFactory.clientConnectionFailed(self, connector, reason)
+        self.onPilightDisconnected()
 
 
-def run(address, blocking = False):
-    factory = PilightClientFactory(address)
-    factory.protocol = PilightClientProtocol
-    factory.setProtocolOptions(version = 13, allowHixie76 = True)
+def onConnected(client): print 'connected'
+def onDisconnected(): print 'disconnected'
+def onUpdate(): print 'update'
 
-    connectWS(factory)
+
+def run(host, port = 5000, blocking = True,
+        connectedCallback = onConnected,
+        disconnectedCallback = onDisconnected,
+        updateCallback = onUpdate):
+
+    factory = PilightClientFactory()
+    factory.onPilightConnected = connectedCallback
+    factory.onPilightDisconnected = disconnectedCallback
+    factory.onPilightUpdate = updateCallback
+
+    reactor.connectTCP(host, port, factory)
     reactor.run(installSignalHandlers = blocking)
 
 
 if __name__ == '__main__':
-    run(address = 'ws://192.168.2.4:5000', blocking = True)
+    run(host = 'raspberry')
 
 
