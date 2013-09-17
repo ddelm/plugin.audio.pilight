@@ -81,7 +81,7 @@ class PilightClientFactory(ReconnectingClientFactory, WebSocketClientFactory):
 def run(address, blocking = False):
     factory = PilightClientFactory(address)
     factory.protocol = PilightClientProtocol
-    factory.setProtocolOptions(version = 13)
+    factory.setProtocolOptions(version = 13, allowHixie76 = True)
 
     connectWS(factory)
     reactor.run(installSignalHandlers = blocking)
