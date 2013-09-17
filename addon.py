@@ -6,9 +6,9 @@ from twisted.internet import reactor
 
 import pilight
 import time
-import signal
 
 
+client = None
 plugin = Plugin()
 STRINGS = {}
 
@@ -28,30 +28,20 @@ def _(string_id):
         return string_id
 
 
-def onPilightConnected():
-    print 'onPilightConnected'
-
-
 def onPilightDisconnected():
-    print 'onPilightDisconnected'
+    client = None
 
 
-def onStop(num, frame):
-    if num == signal.SIGINT:
-        reactor.stop()
+def onPilightConnected(c):
+    client = c
+    plugin.run()
 
 
 if __name__ == '__main__':
-    reactor.addSystemEventTrigger(
-        'during', 'onPilightConnected', onPilightConnected)
+    pilight.configure(host = 'raspberry', 
+        connectedCallback = onPilightConnected, 
+        disconnectedCallback = onPilightDisconnected)
 
-    reactor.addSystemEventTrigger(
-        'during', 'onPilightDisconnected', onPilightDisconnected)
-
-    signal.signal(signal.SIGINT, onStop)
-    signal.signal(signal.SIGHUP, onStop)
-
-    pilight.run(address = 'ws://raspberry:5001/')
-    plugin.run()
+    reactor.run()
 
 

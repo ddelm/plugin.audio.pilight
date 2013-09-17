@@ -12,8 +12,14 @@ class PilightClientProtocol(Protocol):
     config = None
 
     def connectionMade(self):
-        reactor.callLater(0, self._sendMessage,
-            { 'message': 'client gui' })
+        if factory.enableUpdates:
+            clientType = 'gui'
+        else:
+            clientType = 'controller'
+
+        reactor.callLater(0, self._sendMessage, {
+            'message': clientType
+        })
 
     def _sendMessage(self, message):
         self.transport.write(json.dumps(message))
@@ -31,8 +37,11 @@ class PilightClientProtocol(Protocol):
         })
 
     def _updateConfig(self, msg):
-        state = msg['values']['state']
+        if msg['type'] != 1:
+            print 'WARNING: Switches are the only devices. Ignoring update.'
+            return
 
+        state = msg['values']['state']
         for location in msg['devices'].keys():
             for device in msg['devices'][location]:
                 self.config[location][device]['state'] = state
@@ -60,6 +69,8 @@ class PilightClientFactory(ReconnectingClientFactory):
     maxDelay = 2
     protocol = PilightClientProtocol
 
+    enableUpdates = True
+
     onPilightConnected = None
     onPilightDisconnected = None
     onPilightUpdate = None
@@ -78,18 +89,19 @@ def onDisconnected(): print 'disconnected'
 def onUpdate(): print 'update'
 
 
-def run(host, port = 5000, blocking = True,
+def configure(host, port = 5000,
+        enableUpdates = False,
         connectedCallback = onConnected,
         disconnectedCallback = onDisconnected,
         updateCallback = onUpdate):
 
     factory = PilightClientFactory()
+    factory.enableUpdates = enableUpdates
     factory.onPilightConnected = connectedCallback
     factory.onPilightDisconnected = disconnectedCallback
     factory.onPilightUpdate = updateCallback
 
     reactor.connectTCP(host, port, factory)
-    reactor.run(installSignalHandlers = blocking)
 
 
 if __name__ == '__main__':
