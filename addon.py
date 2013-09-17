@@ -2,22 +2,76 @@
 # -*- coding: utf-8 -*-
 
 from xbmcswift2 import Plugin, xbmc, xbmcaddon
-from twisted.internet import reactor
+from operator import itemgetter
+import socket, json
 
-import pilight
-import time
+STRINGS = {
+    'error': 30001
+}
 
-
-client = None
 plugin = Plugin()
-STRINGS = {}
 
 
 @plugin.route('/')
-def index():
-    return plugin.finish([
-        { 'label': 'Video', 'path': 'video.mp4', 'is_playable': True }
-    ])
+def show_groups():
+    pilight = get_pilight()
+    if not pilight.connect(): return plugin_error()
+
+    groups = pilight.groups()    
+    if not groups: return plugin_error()
+
+    items = []
+    for path in groups.keys():
+        items.append({
+            'label': groups[path]['name'],
+            'path': plugin.url_for('show_devices', group = path),
+            'is_playable': False,
+            'info': {
+                'Year': groups[path]['order']
+            }
+        });
+
+    pilight.disconnect()
+    return plugin.finish(sorted(items, 
+        key = lambda item: item['info']['Year']))
+
+
+@plugin.route('/group/<group>')
+def show_devices(group):
+    pilight = get_pilight()
+    if not pilight.connect(): return plugin_error()
+
+    devices = pilight.devices(group)    
+    if not devices: return plugin_error()
+
+    items = []
+    for path in devices.keys():
+        if not type(devices[path]) is dict:
+            continue
+
+        items.append({
+            'label': devices[path]['name'],
+            'path': plugin.url_for('toggle_device', group = str(group), device = path),
+            'is_playable': False,
+            'info': {
+                'Year': devices[path]['order']
+            }
+        });
+
+    pilight.disconnect()
+    return plugin.finish(sorted(items, 
+        key = lambda item: item['info']['Year']))
+
+
+@plugin.route('/toggle/<group>/<device>')
+def toggle_device(group, device):
+    pilight = get_pilight()
+    if not pilight.connect(): return plugin_error()
+
+    pilight.toggle(group, device)
+    pilight.disconnect()
+
+    plugin.redirect(plugin.url_for('show_devices', group = str(group)))
 
 
 def _(string_id):
@@ -28,20 +82,88 @@ def _(string_id):
         return string_id
 
 
-def onPilightDisconnected():
+def get_pilight():
+    return Pilight('raspberry', 5000)
+
+
+def plugin_error():
+    return plugin.finish([{ 'label': _('error'), 'is_playable': False }])
+
+
+# maybe better reading from config.json
+class Pilight(object):
+
     client = None
+    host = None
+    port = 0
 
 
-def onPilightConnected(c):
-    client = c
-    plugin.run()
+    def __init__(self, host = '127.0.0.1', port = 5000):
+        self.client = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+        self.host = host
+        self.port = port
+
+
+    def connect(self):
+        self.client.connect((self.host, self.port))
+
+        msg = self._request({ 'message': 'client controller' })
+        msg_key = msg.keys()[0]     
+
+        if msg_key != 'message' or msg[msg_key] != 'accept client':
+            plugin.log.warning('handshake failed (response: %s)') % (response)
+            return False
+
+        return True
+
+
+    def disconnect(self):
+        self.client.shutdown(socket.SHUT_RDWR)
+        self.client.close()
+    
+
+    def groups(self):
+        return self._config()
+    
+
+    def devices(self, group):
+        groups = self._config()
+        
+        if group not in groups.keys():
+            plugin.log.warning('device request empty for %s') % (group)
+            return False
+
+        return groups[group]
+
+
+    def toggle(self, group, device):
+        self._request({
+            'message': 'send',
+            'code': {
+                'location': group,
+                'device': device
+            }
+        })
+
+
+    def _config(self):
+        msg = self._request({ 'message': 'request config' })
+        msg_key = msg.keys()[0]     
+
+        if msg_key != 'config':
+            plugin.log.warning('config request failed (response: %s)') % (response)
+            return False
+    
+        return msg['config']
+
+
+    def _request(self, msg):
+        self.client.send(json.dumps(msg))
+        response = self.client.makefile(mode = 'r').readline()
+        return json.loads(response)
 
 
 if __name__ == '__main__':
-    pilight.configure(host = 'raspberry', 
-        connectedCallback = onPilightConnected, 
-        disconnectedCallback = onPilightDisconnected)
-
-    reactor.run()
+    plugin.run()
 
 

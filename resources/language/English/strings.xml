@@ -2,4 +2,5 @@
 <strings>
   <!-- Plugin name -->
   <string id="30000">pilight</string>
+  <string id="30001">There was an error</string>
 </strings>
