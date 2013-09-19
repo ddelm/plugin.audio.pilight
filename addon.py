@@ -6,12 +6,10 @@ import socket, json
 
 plugin = Plugin()
 
-CACHE_TTL = 60 * 24 # minutes
+CACHE_TTL = 0 # minutes
 
 STRINGS = {
-    'error': 30001,
-    'on': 30002,
-    'off': 30003
+    'error': 30001
 }
 
 
@@ -24,15 +22,11 @@ STRINGS = {
 
 @plugin.route('/')
 def show_groups():
-    return plugin.finish(get_group_items())
-
-#@plugin.cached(TTL = CACHE_TTL)
-def get_group_items():
     pilight = _pilight()
     if not pilight.connect(): return _error()
 
     groups = pilight.groups()    
-    if not groups: return _error()
+    if not groups: return plugin.finish(_error())
 
     items = []
     for path in groups.keys():
@@ -43,23 +37,21 @@ def get_group_items():
         })
 
     pilight.disconnect()
-    return sorted(items, key = lambda item: item['info']['Year'])
+    return plugin.finish(
+        sorted(items, key = lambda item: item['info']['Year']))
 
 
 @plugin.route('/group/<group>/')
 def show_devices(group):
-    return plugin.finish(get_devices(group))
-
-#@plugin.cached(TTL = CACHE_TTL)
-def get_devices(group):
     pilight = _pilight()
-    if not pilight.connect(): return _error()
+    if not pilight.connect(): return plugin.finish(_error())
 
     devices = pilight.devices(group)    
     if not devices: return _error()
 
     if 'toggle' in plugin.request.args:
         pilight.toggle(group, plugin.request.args['toggle'][0])
+        del plugin.request.args['toggle']
 
     items = []
     for path in devices.keys():
@@ -80,8 +72,8 @@ def get_devices(group):
         })
 
     pilight.disconnect()
-    return sorted(items, key = lambda item: item['info']['Year'])
-
+    return plugin.finish(
+        sorted(items, key = lambda item: item['info']['Year']))
 
 
 ################################################################################
