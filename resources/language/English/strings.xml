@@ -3,4 +3,6 @@
   <!-- Plugin name -->
   <string id="30000">pilight</string>
   <string id="30001">There was an error</string>
+  <string id="30002">on</string>
+  <string id="30003">off</string>
 </strings>

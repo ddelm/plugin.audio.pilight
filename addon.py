@@ -1,7 +1,7 @@
 #!/usr/bin/python
 # -*- coding: utf-8 -*-
 
-from xbmcswift2 import Plugin, xbmc, xbmcaddon
+from xbmcswift2 import Plugin, ListItem, xbmc, xbmcaddon
 import socket, json
 
 plugin = Plugin()
@@ -9,7 +9,9 @@ plugin = Plugin()
 CACHE_TTL = 60 * 24 # minutes
 
 STRINGS = {
-    'error': 30001
+    'error': 30001,
+    'on': 30002,
+    'off': 30003
 }
 
 
@@ -24,40 +26,43 @@ STRINGS = {
 def show_groups():
     return plugin.finish(get_group_items())
 
-@plugin.cached(TTL = CACHE_TTL)
+#@plugin.cached(TTL = CACHE_TTL)
 def get_group_items():
-    pilight = get_pilight()
-    if not pilight.connect(): return plugin_error()
+    pilight = _pilight()
+    if not pilight.connect(): return _error()
 
     groups = pilight.groups()    
-    if not groups: return plugin_error()
+    if not groups: return _error()
 
     items = []
     for path in groups.keys():
         items.append({
             'label': groups[path]['name'],
+            'label2': str(len(groups[path])),
+            'icon': _image('light_bulb'),
+            'thumbnail': _image('light_bulb'),
             'path': plugin.url_for('show_devices', group = path),
-            'is_playable': False,
-            'info': {
-                'Year': groups[path]['order']
-            }
-        });
+            'info': { 'Year': groups[path]['order'] }
+        })
 
     pilight.disconnect()
     return sorted(items, key = lambda item: item['info']['Year'])
 
 
-@plugin.route('/group/<group>')
+@plugin.route('/group/<group>/')
 def show_devices(group):
     return plugin.finish(get_devices(group))
 
-@plugin.cached(TTL = CACHE_TTL)
+#@plugin.cached(TTL = CACHE_TTL)
 def get_devices(group):
-    pilight = get_pilight()
-    if not pilight.connect(): return plugin_error()
+    pilight = _pilight()
+    if not pilight.connect(): return _error()
 
     devices = pilight.devices(group)    
-    if not devices: return plugin_error()
+    if not devices: return _error()
+
+    if 'toggle' in plugin.request.args:
+        pilight.toggle(group, plugin.request.args['toggle'][0])
 
     items = []
     for path in devices.keys():
@@ -66,26 +71,16 @@ def get_devices(group):
 
         items.append({
             'label': devices[path]['name'],
-            'path': plugin.url_for('toggle_device', group = str(group), device = path),
-            'is_playable': False,
-            'info': {
-                'Year': devices[path]['order']
-            }
-        });
+            'label2': _('on') if devices[path]['state'] == 'on' else _('off'),
+            'icon': _image('light_bulb'),
+            'thumbnail': _image('light_bulb'),
+            'path': plugin.url_for('show_devices', group = group, toggle = path),
+            'info': { 'Year': devices[path]['order'] }
+        })
 
     pilight.disconnect()
     return sorted(items, key = lambda item: item['info']['Year'])
 
-
-@plugin.route('/toggle/<group>/<device>')
-def toggle_device(group, device):
-    pilight = get_pilight()
-    if not pilight.connect(): return plugin_error()
-
-    pilight.toggle(group, device)
-    pilight.disconnect()
-
-    plugin.redirect(plugin.url_for('show_devices', group = str(group)))
 
 
 ################################################################################
@@ -104,12 +99,17 @@ def _(string_id):
         return string_id
 
 
-def get_pilight():
+def _image(image):
+    return 'special://home/addons/%s/resources/media/%s.png' % \
+        (plugin._addon.getAddonInfo('id'), image)
+
+
+def _pilight():
     return Pilight('raspberry', 5000)
 
 
-def plugin_error():
-    return plugin.finish([{ 'label': _('error'), 'is_playable': False }])
+def _error():
+    return [{ 'label': _('error'), 'is_playable': False }]
 
 
 ################################################################################
@@ -124,6 +124,7 @@ class Pilight(object):
     client = None
     host = None
     port = 0
+    config = None
 
 
     def __init__(self, host = '127.0.0.1', port = 5000):
@@ -134,13 +135,19 @@ class Pilight(object):
 
     def connect(self):
         self.client.connect((self.host, self.port))
-
         msg = self._request({ 'message': 'client controller' })
-        msg_key = msg.keys()[0]     
 
-        if msg_key != 'message' or msg[msg_key] != 'accept client':
-            plugin.log.warning('handshake failed (response: %s)') % (response)
+        if 'message' not in msg or msg['message'] != 'accept client':
+            plugin.log.error('handshake failed')
             return False
+
+        msg = self._request({ 'message': 'request config' })
+
+        if 'config' not in msg:
+            plugin.log.error('config request failed')
+            return False
+    
+        self.config = msg['config']
 
         return True
 
@@ -151,20 +158,23 @@ class Pilight(object):
     
 
     def groups(self):
-        return self._config()
+        return self.config
     
 
     def devices(self, group):
-        groups = self._config()
-        
-        if group not in groups.keys():
-            plugin.log.warning('device request empty for %s') % (group)
+        if not self.config or group not in self.config:
+            plugin.log.error('device request empty')
             return False
 
-        return groups[group]
+        return self.config[group]
 
 
     def toggle(self, group, device):
+        if self.config[group][device]['state'] == 'on':
+            self.config[group][device]['state'] = 'off'
+        else:
+            self.config[group][device]['state'] = 'on'
+
         self._request({
             'message': 'send',
             'code': {
@@ -174,26 +184,15 @@ class Pilight(object):
         })
 
 
-    def _config(self):
-        msg = self._request({ 'message': 'request config' })
-        msg_key = msg.keys()[0]     
-
-        if msg_key != 'config':
-            plugin.log.warning('config request failed (response: %s)') % (response)
-            return False
-    
-        return msg['config']
-
-
     def _request(self, msg):
         self.client.send(json.dumps(msg))
-        response = self.client.makefile(mode = 'r').readline()
+        response = self.client.makefile(mode = 'r').readline().strip()
 
         try:
             return json.loads(response)
         except:
             return {}
-
+        
 
 ################################################################################
 #
