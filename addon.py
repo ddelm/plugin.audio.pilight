@@ -6,8 +6,6 @@ import socket, json
 
 plugin = Plugin()
 
-CACHE_TTL = 0 # minutes
-
 STRINGS = {
     'error': 30001
 }
@@ -81,7 +79,6 @@ def show_devices(group):
 #   Helper
 #
 ################################################################################
-
 
 
 def _(string_id):
