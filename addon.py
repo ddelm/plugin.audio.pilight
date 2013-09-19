@@ -95,7 +95,7 @@ def _image(image):
 
 
 def _pilight():
-    return Pilight('raspberry', 5000)
+    return Pilight()
 
 
 def _error():

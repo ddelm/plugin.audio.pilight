@@ -11,10 +11,6 @@
         <platform>all</platform>
         <language>en</language>
         <summary>pilight XBMC control</summary>
-        <description>Control your pilight (pilight.org) configured switches
-            with XBMC. I like Yatse as XBMC remote, so this plugin is marked as
-            audio extension for client-side control. Icon under Creative
-            Commons Attribution-NoDerivs 3.0 Unported taken from icons8.com.
-        </description>
+        <description>Control your pilight (pilight.org) configured switches with XBMC. I like Yatse as XBMC remote, so this plugin is marked as audio extension for client-side control. Icon under Creative Commons Attribution-NoDerivs 3.0 Unported taken from icons8.com.</description>
     </extension>
 </addon>
