@@ -2,7 +2,6 @@
 # -*- coding: utf-8 -*-
 
 from xbmcswift2 import Plugin, xbmc, xbmcaddon
-from operator import itemgetter
 import socket, json
 
 plugin = Plugin()
