@@ -22,7 +22,7 @@ STRINGS = {
 
 @plugin.route('/')
 def show_groups():
-    plugin.finish(get_group_items())
+    return plugin.finish(get_group_items())
 
 @plugin.cached(TTL = CACHE_TTL)
 def get_group_items():
