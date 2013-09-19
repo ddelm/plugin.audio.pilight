@@ -38,9 +38,6 @@ def get_group_items():
     for path in groups.keys():
         items.append({
             'label': groups[path]['name'],
-            'label2': str(len(groups[path])),
-            'icon': _image('light_bulb'),
-            'thumbnail': _image('light_bulb'),
             'path': plugin.url_for('show_devices', group = path),
             'info': { 'Year': groups[path]['order'] }
         })
@@ -69,11 +66,15 @@ def get_devices(group):
         if not type(devices[path]) is dict:
             continue
 
+        if devices[path]['state'] == 'on':
+            icon = _image('light_on')
+        else:
+            icon = _image('light_off')
+
         items.append({
             'label': devices[path]['name'],
-            'label2': _('on') if devices[path]['state'] == 'on' else _('off'),
-            'icon': _image('light_bulb'),
-            'thumbnail': _image('light_bulb'),
+            'icon': icon,
+            'thumbnail': icon,
             'path': plugin.url_for('show_devices', group = group, toggle = path),
             'info': { 'Year': devices[path]['order'] }
         })
