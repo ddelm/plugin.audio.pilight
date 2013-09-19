@@ -1,5 +1,5 @@
 <?xml version="1.0" encoding="UTF-8" standalone="yes"?>
-<addon id="plugin.audio.pilight" name="pilight" version="0.1" provider-name="Peter Heisig">
+<addon id="plugin.audio.pilight" name="pilight" version="1.0.0" provider-name="Peter Heisig (gplus.to/peter.heisig)">
     <requires>
         <import addon="xbmc.python" version="2.1.0"/>
         <import addon="script.module.xbmcswift2" version="2.4.0"/>
@@ -9,7 +9,12 @@
     </extension>
     <extension point="xbmc.addon.metadata">
         <platform>all</platform>
-        <language>de</language>
-        <summary>Pilight XBMC Steuerung</summary>
+        <language>en</language>
+        <summary>pilight XBMC control</summary>
+        <description>Control your pilight (pilight.org) configured switches
+            with XBMC. I like Yatse as XBMC remote, so this plugin is marked as
+            audio extension for client-side control. Icon under Creative
+            Commons Attribution-NoDerivs 3.0 Unported taken from icons8.com.
+        </description>
     </extension>
 </addon>
